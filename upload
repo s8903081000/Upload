@@ -1,0 +1,913 @@
+package com.example.uchuu_project;
+
+import it.sauronsoftware.ftp4j.FTPClient;
+import it.sauronsoftware.ftp4j.FTPDataTransferListener;
+
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.Locale;
+
+import org.apache.http.NameValuePair;
+import org.apache.http.message.BasicNameValuePair;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import android.annotation.SuppressLint;
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.app.ProgressDialog;
+import android.content.ContentResolver;
+import android.content.ContentUris;
+import android.content.Context;
+import android.content.DialogInterface;
+import android.content.Intent;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
+import android.database.Cursor;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.media.MediaScannerConnection;
+import android.media.ThumbnailUtils;
+import android.net.Uri;
+import android.os.AsyncTask;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.Environment;
+import android.os.Handler;
+import android.os.Message;
+import android.provider.DocumentsContract;
+import android.provider.MediaStore;
+import android.util.Log;
+import android.view.MenuItem;
+import android.view.View;
+import android.view.View.OnClickListener;
+import android.widget.AdapterView;
+import android.widget.AdapterView.OnItemSelectedListener;
+import android.widget.ArrayAdapter;
+import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.CompoundButton;
+import android.widget.CompoundButton.OnCheckedChangeListener;
+import android.widget.EditText;
+import android.widget.ImageView;
+import android.widget.MediaController;
+import android.widget.ProgressBar;
+import android.widget.Spinner;
+import android.widget.Toast;
+import android.widget.VideoView;
+//import com.givemepass.alertdialogdemo.AlertDialogDemoActivity;
+import com.example.uchuu_project.CodeScanner.CodeReaderListener;
+import com.example.uchuu_project.CodeScanner.Mode;
+
+public class SentMessage extends Activity implements OnClickListener {
+	static final String FTP_HOST = "31.170.167.244";
+	static final String FTP_USER = "u908246328";
+	static final String FTP_PASS = "12345678";
+
+	VideoView videoView;
+	EditText etTo, etTit, etCon;
+	Button btnAtt, btnSent, btntackphoto, btnVedio, btnSelectFriend;
+	CheckBox LINE, Drink;
+	String To, Tit, Con, From, dts, sourceimagepath, picname, videopath,
+			videoname, datasend = "";
+	private final int TAKE_PICTURE = 1888, TAKE_VIDEO = 2, RESULT_video = 999,
+			SelectPic = 3;
+	public static final String PACKAGE_NAME = "jp.naver.line.android";
+	public static final String CLASS_NAME = "jp.naver.line.android.activity.selectchat.SelectChatActivity";
+	private String url_FindID = "http://www.oooooooooo.lionfree.net/php/FindID.php";
+	private List<ApplicationInfo> m_appList;
+	private int withfile = 0;// 0:無檔案,1:帶圖片,2:帶影片,3:both
+	private int withLine = 0;// 4:有傳LINE
+	String method = "Sent";
+	String iconpath = null, aa = "";
+	ProgressDialog PD;
+	Bundle bu;
+	JSONParser JP = new JSONParser();
+	ProgressBar myProgressBar;
+	String url_SentMessage = "http://www.oooooooooo.lionfree.net/php/Message.php";
+	String[] Selectfriend, ID, name;
+	int PicCount = 0, msgcount = 0, backcount = 0;
+	ImageView iv_gameicon;
+	Thread countToTen;
+	int num, setdrink = 0, getdrink = 0;
+	Spinner sp;
+	final String[] Drinklist = { "焦糖瑪奇朵", "美式咖啡", "抹茶那堤", "咖啡星冰樂", "焦糖可可碎片星冰樂" };
+	float size = 0, Progress = 0;
+	int UPcount = 0;
+	Handler handler;
+	File video, pic;
+	CodeReaderListener c = new CodeReaderListener() {
+
+		@Override
+		public void codeReadResult(String type, String data) {
+			try {
+				aa = data;
+			} catch (Exception e) {
+				// TODO: handle exception
+				aa = "";
+			}
+
+		}
+	};
+	CodeScanner cs = new CodeScanner(SentMessage.this, c);
+
+	@Override
+	protected void onCreate(Bundle savedInstanceState) {
+		super.onCreate(savedInstanceState);
+		setContentView(R.layout.activity_sent_message);
+		setTitle("寄送訊息");
+		bu = getIntent().getExtras();
+		From = bu.getString("acc");
+		Selectfriend = bu.getStringArray("friend");
+
+		sp = (Spinner) findViewById(R.id.SspDrink);
+
+		etTo = (EditText) findViewById(R.id.SetTo);
+		etTit = (EditText) findViewById(R.id.SetTit);
+		etCon = (EditText) findViewById(R.id.SetCon);
+		iv_gameicon = (ImageView) findViewById(R.id.imageView1);
+		videoView = (VideoView) findViewById(R.id.videoView1);
+		LINE = (CheckBox) findViewById(R.id.LINE);
+		Drink = (CheckBox) findViewById(R.id.ScbDrink);
+		ArrayAdapter<String> list = new ArrayAdapter<String>(SentMessage.this,
+				android.R.layout.simple_spinner_item, Drinklist);
+
+		sp.setAdapter(list);
+
+		sp.setOnItemSelectedListener(DRINK);
+		if (!Selectfriend[0].equals("你沒有朋友")) {
+			new getID().execute();
+		}
+
+		btnSelectFriend = (Button) findViewById(R.id.btnSelectFriend);
+		btnSelectFriend.setOnClickListener(new OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				// TODO Auto-generated method stub
+				new AlertDialog.Builder(SentMessage.this).setTitle("選擇好友")
+						.setItems(ID, new DialogInterface.OnClickListener() {
+							@Override
+							public void onClick(DialogInterface dialog,
+									int which) {
+								num = which;
+								etTo.setText(ID[which]);
+							}
+						}).show();
+			}
+		});
+
+		btnVedio = (Button) findViewById(R.id.btnVedio);
+		btnVedio.setOnClickListener(new OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				// TODO Auto-generated method stub
+				if (isIntentAvailable(SentMessage.this,
+						MediaStore.ACTION_VIDEO_CAPTURE)) {
+					Intent intent = new Intent(MediaStore.ACTION_VIDEO_CAPTURE);
+					startActivityForResult(intent, TAKE_VIDEO);
+				} else {
+					Toast.makeText(SentMessage.this, "activity_take_video",
+							Toast.LENGTH_SHORT).show();
+				}
+			}
+		});
+
+		btntackphoto = (Button) findViewById(R.id.btntackphoto);
+		btntackphoto.setOnClickListener(new OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				// TODO Auto-generated method stub
+				takePhoto();
+			}
+		});
+
+		btnSent = (Button) findViewById(R.id.SbtnSent);
+		btnSent.setOnClickListener(new OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				To = etTo.getText().toString();
+				Tit = etTit.getText().toString();
+				Con = etCon.getText().toString();
+				if (To.length() == 0 || Con.length() == 0) {
+					Toast.makeText(SentMessage.this, "收件人或內容不可空白", 0).show();
+				} else if (To.equals(From)) {
+					Toast.makeText(SentMessage.this, "你沒有朋友是嗎?", 0).show();
+				} else {
+					new Sent().execute();
+				}
+			}
+		});
+
+		btnAtt = (Button) findViewById(R.id.SbtnAtt);
+		btnAtt.setOnClickListener(new OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				// TODO Auto-generated method stub
+				getImage();
+			}
+		});
+		Drink.setOnCheckedChangeListener(new OnCheckedChangeListener() {
+			@Override
+			public void onCheckedChanged(CompoundButton buttonView,
+					boolean isChecked) {
+
+				if (setdrink++ == 0) {
+					Drink.setChecked(false);
+					Toast.makeText(SentMessage.this, "再按一次可請櫃檯人員掃專用QRcode", 0)
+							.show();
+				} else if (isChecked) {
+					btnSent.setClickable(false);
+					cs.setMode(Mode.QR_CODE_MODE);
+					cs.setCrop(true);
+					cs.scan();
+				}
+
+			}
+		});
+		handler = new Handler() {
+			@Override
+			public void handleMessage(Message msg) {
+				PD.incrementProgressBy(1);
+				super.handleMessage(msg);
+			}
+		};
+	}
+
+	OnItemSelectedListener DRINK = new OnItemSelectedListener() {
+
+		@Override
+		public void onItemSelected(AdapterView<?> parent, View view,
+				int position, long id) {
+			getdrink = ++position;
+		}
+
+		@Override
+		public void onNothingSelected(AdapterView<?> parent) {
+			// TODO Auto-generated method stub
+
+		}
+	};
+
+	public class getID extends AsyncTask<String, String, String> {
+
+		@Override
+		protected String doInBackground(String... params) {
+
+			List<NameValuePair> p = new ArrayList<NameValuePair>();
+			String friend = "", ID2 = "";
+			for (int i = 0; i < Selectfriend.length; i++) {
+				friend += Selectfriend[i] + ",";
+			}
+			friend.substring(0, friend.length() - 1);
+			p.add(new BasicNameValuePair("friend", friend));
+
+			JSONObject json;
+			do {
+				json = JP.makeHttpRequest(url_FindID, "POST", p);
+			} while (json == null);
+			try {
+				ID2 = json.getString("ID");
+				ID = ID2.split(",");
+			} catch (JSONException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			Log.i("ID.length", ID.length + "");
+			Log.i("alfriend.length", Selectfriend.length + "");
+			for (int i = 0; i < Selectfriend.length; i++) {
+				ID[i] = ID[i] + "(" + Selectfriend[i] + ")";
+			}
+			return null;
+		}
+
+		@Override
+		protected void onPostExecute(String result) {
+			btnSelectFriend.setEnabled(true);
+		}
+	}
+
+	protected void takePhoto() {
+		// TODO Auto-generated method stub
+		if (isIntentAvailable(this, MediaStore.ACTION_IMAGE_CAPTURE)) {
+			Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+
+			SimpleDateFormat sdf = new SimpleDateFormat("yyyy_MM_dd_HH_mm_ss");
+			Date dt = new Date();
+			dts = sdf.format(dt);
+			picname = From + "_" + dts + ".jpg";
+			sourceimagepath = Environment
+					.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)
+					+ "/" + picname;
+			File tmpFile = new File(sourceimagepath);
+			Uri outputFileUri = Uri.fromFile(tmpFile);
+			iconpath = outputFileUri.getPath();
+			intent.putExtra(MediaStore.EXTRA_OUTPUT, outputFileUri);
+			startActivityForResult(intent, TAKE_PICTURE);
+
+		} else {
+			Toast.makeText(this, "沒有照相機", Toast.LENGTH_SHORT).show();
+		}
+	}
+
+	private boolean isIntentAvailable(Context context, String action) {
+		// TODO Auto-generated method stub
+		PackageManager packageManager = context.getPackageManager();
+		Intent intent = new Intent(action);
+		List<ResolveInfo> list = packageManager.queryIntentActivities(intent,
+				PackageManager.MATCH_DEFAULT_ONLY);
+		return list.size() > 0;
+	}
+
+	@Override
+	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+		super.onActivityResult(requestCode, resultCode, data);
+		if (resultCode == RESULT_OK) {
+			Log.i("requestCode", String.valueOf(requestCode));
+			switch (requestCode) {
+			case TAKE_PICTURE:
+				Bitmap bitmap = BitmapFactory.decodeFile(sourceimagepath);
+				Bitmap minibm = ThumbnailUtils.extractThumbnail(bitmap, 250,
+						350);
+				saveImage(minibm);
+				iv_gameicon.setImageBitmap(minibm);
+				pic = new File(picname);
+				if (withfile == 0) {// 若沒有附帶任何檔案
+					withfile = 1;
+				} else if (withfile == 2) {// 若已有附帶影片
+					withfile = 3;
+				}
+				break;
+			case TAKE_VIDEO:
+				Uri uri = data.getData();
+				MediaController controller = new MediaController(this);
+				videoView.setMediaController(controller);
+				videoView.setVideoURI(uri);
+				videoView.start();
+				saveVideo(uri);
+				video = new File(videopath);
+				size(video);
+				if (withfile == 0) {// 若沒有附帶任何檔案
+					withfile = 2;
+				} else if (withfile == 1) {// 若已有附帶影片
+					withfile = 3;
+				}
+				break;
+			case SelectPic:
+				Uri selectedImage = data.getData();
+				iconpath = getPath(getApplicationContext(), selectedImage);
+				ShowImage(requestCode, data);
+				pic = new File(picname);
+				if (withfile == 0) {// 若沒有附帶任何檔案
+					withfile = 1;
+				} else if (withfile == 2) {// 若已有附帶影片
+					withfile = 3;
+				}
+				File tmpFile = new File(
+						Environment.getExternalStorageDirectory(), picname);
+				Uri outputFileUri = Uri.fromFile(tmpFile);
+
+				iconpath = outputFileUri.getPath();
+
+				// tv1.setText(sourceimagepath);
+
+				break;
+			case 9974:// QR
+				btnSent.setClickable(true);
+				cs.onActivityResult(requestCode, resultCode, data);
+				Log.i("drink", aa.trim());
+				if (!aa.equals("送飲料功能專用QRcode")) {
+					Drink.setChecked(false);
+					Toast.makeText(SentMessage.this, "此QRcode不是專屬QRcode", 0)
+							.show();
+				} else {
+					Drink.setClickable(false);
+
+				}
+				break;
+			default:
+				// ShowImage(requestCode, data);
+				// if (withfile == 0) {// 若沒有附帶任何檔案
+				// withfile = 1;
+				// } else if (withfile == 2) {// 若已有附帶影片
+				// withfile = 3;
+				// }
+				break;
+			}
+		}
+
+	}
+
+	private void saveVideo(Uri uri) {
+		if (!isSDExist()) {
+			Toast.makeText(this, "沒有SD卡", Toast.LENGTH_LONG).show();
+			return;
+		}
+		File videoDir = new File(android.os.Environment
+				.getExternalStorageDirectory().getPath() + "/Movie");
+		if (!videoDir.exists()) {
+			videoDir.mkdirs();
+		}
+
+		String videoPathFromUri = getRealPathFromURI(uri);
+		SimpleDateFormat sdf = new SimpleDateFormat("yyyy_MM_dd_HH_mm_ss",
+				Locale.getDefault());
+		Date dt = new Date();
+		String dts = sdf.format(dt);
+		videoname = From + "_" + dts + ".mp4";
+		File videoFile = new File(videoDir, "/" + videoname);
+		try {
+			FileInputStream fis = new FileInputStream(videoPathFromUri);
+			FileOutputStream fos = new FileOutputStream(videoFile);
+			byte[] buffer = new byte[1024];
+			int byteCount;
+			/*
+			 * the number of bytes actually read or -1 if the end of the stream
+			 * has been reached.
+			 */
+			while ((byteCount = fis.read(buffer)) != -1) {
+				fos.write(buffer, 0, byteCount);
+			}
+			fis.close();
+			fos.close();
+			// textView.setText("SAVE:" + videoFile.toString());
+			videopath = videoFile.toString();
+		} catch (IOException ioe) {
+			Log.e(getPackageName(), ioe.toString());
+		}
+		String[] paths = { videoFile.toString() };
+		callMediaScanner(paths);
+	}
+
+	private void saveImage(Bitmap image) {
+		// TODO Auto-generated method stub
+		if (!isSDExist()) {
+			Toast.makeText(this, "手機沒SD卡", Toast.LENGTH_LONG).show();
+			return;
+		}
+
+		File imageDir = Environment
+				.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM);
+		if (!imageDir.exists()) {
+			imageDir.mkdirs();
+		}
+		picname = From + "_" + dts + ".jpg";
+		File imageFile = new File(imageDir, picname);
+		try {
+			BufferedOutputStream bos = new BufferedOutputStream(
+					new FileOutputStream(imageFile));
+			image.compress(Bitmap.CompressFormat.JPEG, 95, bos);
+			bos.flush();
+			bos.close();
+			// iconpath = imageFile.getPath();
+		} catch (IOException ioe) {
+			Log.e(getPackageName(), ioe.toString());
+		}
+		String[] paths = { imageFile.toString() };
+		callMediaScanner(paths);
+	}
+
+	public String getRealPathFromURI(Uri uri) {
+		String[] columns = { MediaStore.Images.Media.DATA };
+		ContentResolver contentResolver = getContentResolver();
+		Cursor cursor = contentResolver.query(uri, columns, null, null, null);
+		int column_index = cursor
+				.getColumnIndexOrThrow(MediaStore.Images.Media.DATA);
+		cursor.moveToFirst();
+		return cursor.getString(column_index);
+	}
+
+	private void callMediaScanner(String[] paths) {
+		// TODO Auto-generated method stub
+		MediaScannerConnection.scanFile(this, paths, null,
+				new MediaScannerConnection.OnScanCompletedListener() {
+					public void onScanCompleted(String path, Uri uri) {
+						Log.i("ExternalStorageEx", "Scanned " + path + ":");
+						Log.i("ExternalStorageEx", "-> uri=" + uri);
+					}
+				});
+	}
+
+	private boolean isSDExist() {
+		// TODO Auto-generated method stub
+		String state = Environment.getExternalStorageState();
+		if (state.equals(Environment.MEDIA_MOUNTED))
+			return true;
+		else
+			return false;
+	}
+
+	protected void getImage() {
+		// TODO Auto-generated method stub
+		Intent intent = new Intent();
+		intent.setType("image/*");
+		intent.setAction(Intent.ACTION_GET_CONTENT);
+		SimpleDateFormat sdf = new SimpleDateFormat("yyyy_MM_dd_HH_mm_ss",
+				Locale.getDefault());
+		Date dt = new Date();
+		dts = sdf.format(dt);
+		picname = From + "_" + dts + ".jpg";
+		sourceimagepath = Environment
+				.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)
+				+ "/" + picname;
+		File tmpFile = new File(sourceimagepath);
+		Uri outputFileUri = Uri.fromFile(tmpFile);
+		intent.putExtra(MediaStore.EXTRA_OUTPUT, outputFileUri);
+		if (tmpFile.exists())
+			tmpFile.delete();
+		startActivityForResult(intent, SelectPic);
+	}
+
+	class Sent extends AsyncTask<String, String, JSONObject> {
+		int success, drink;
+		String msg;
+
+		@Override
+		protected void onPreExecute() {
+			// TODO Auto-generated method stub
+			super.onPreExecute();
+			PD = new ProgressDialog(SentMessage.this);
+			if (withfile == 0) {
+				PD.setMessage("上傳中請稍後...");
+			} else if (withfile == 1) {
+				PD.setMessage("檔案上傳中請稍後...");
+			} else {
+				PD.setMessage("檔案上傳中請稍後...");
+				PD.setMax(UPcount);
+				PD.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
+			}
+			PD.setIndeterminate(false);
+			PD.setCancelable(false);
+			PD.show();
+
+		}
+
+		@Override
+		protected JSONObject doInBackground(String... params) {
+			// TODO Auto-generated method stub
+			To = Selectfriend[num];
+			Tit = etTit.getText().toString();
+			Con = etCon.getText().toString();
+			if (Tit.length() == 0) {
+				Tit = "【無主旨的訊息】";
+			}
+			drink = Drink.isChecked() ? getdrink : 0;
+			List<NameValuePair> p = new ArrayList<NameValuePair>();
+			p.add(new BasicNameValuePair("To", To));
+			p.add(new BasicNameValuePair("Tit", Tit));
+			p.add(new BasicNameValuePair("Con", Con));
+			p.add(new BasicNameValuePair("From", From));
+			p.add(new BasicNameValuePair("Method", method));
+			p.add(new BasicNameValuePair("drink", drink + ""));
+			p.add(new BasicNameValuePair("Withfile", String.valueOf(withfile)));
+			if (withfile == 1) {
+				uploadFile(pic, "pic");
+				while (datasend.equals(""))
+					;
+				if (datasend.endsWith("傳送完成")) {
+					p.add(new BasicNameValuePair("Pic", picname));
+					datasend = "";
+				}
+			} else if (withfile == 2) {
+				uploadFile(video, "video");
+				while (datasend.equals(""))
+					;
+				if (datasend.endsWith("傳送完成")) {
+					p.add(new BasicNameValuePair("Video", videoname));
+					datasend = "";
+				} else {
+					return null;
+				}
+			} else if (withfile == 3) {
+				uploadFile(pic, "pic");
+				while (datasend.equals(""))
+					;
+				if (datasend.endsWith("傳送完成")) {
+					p.add(new BasicNameValuePair("Pic", picname));
+					datasend = "";
+				} else {
+					return null;
+				}
+				uploadFile(video, "video");
+				while (datasend.equals(""))
+					;
+				if (datasend.endsWith("傳送完成")) {
+					p.add(new BasicNameValuePair("Video", videoname));
+				} else {
+					return null;
+				}
+			}
+			publishProgress();
+			JSONObject json;
+			do {
+				json = JP.makeHttpRequest(url_SentMessage, "POST", p);
+			} while (json == null);
+			return json;
+		}
+
+		@Override
+		protected void onProgressUpdate(String... values) {
+			// TODO Auto-generated method stub
+			super.onProgressUpdate(values);
+			if (withfile != 0) {
+				PD.setMessage("檔案已上傳，請再稍後");
+			}
+		}
+
+		@Override
+		protected void onPostExecute(JSONObject result) {
+			super.onPostExecute(result);
+			try {
+				success = result.getInt("success");
+				msg = result.getString("message");
+			} catch (JSONException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+				success = 0;
+				msg = "上傳失敗";
+			}
+			Toast.makeText(SentMessage.this, msg, 0).show();
+			if (success == 1) {
+				// 傳LINE
+				String code = null;
+				try {
+					code = result.getString("code");
+				} catch (JSONException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+
+				boolean LINEcheck = LINE.isChecked();
+				if (LINEcheck) {
+					if (checkLineInstalled()) {
+
+						Intent intent = new Intent(Intent.ACTION_SEND);
+						intent.setClassName(PACKAGE_NAME, CLASS_NAME);
+						// intent.setType("image/jpeg");
+						// intent.putExtra(Intent.EXTRA_STREAM, uri);
+						intent.setType("text/plain");
+						if (!Drink.isChecked()) {
+							intent.putExtra(Intent.EXTRA_TEXT,
+									"超好喝咖啡有一則新留言!驗證碼為：" + code);
+						} else {
+							intent.putExtra(Intent.EXTRA_TEXT,
+									"送你一杯飲料喔！來店即可領取！");
+						}
+						startActivity(intent);
+						withLine = 4;
+
+					} else {
+						Toast.makeText(getApplicationContext(), "手機上無安裝LINE",
+								Toast.LENGTH_SHORT).show();
+					}
+				}
+				//
+				finish();
+			}
+			PD.dismiss();
+		}
+	}
+
+	@Override
+	public boolean onOptionsItemSelected(MenuItem item) {
+		// TODO Auto-generated method stub
+		Intent acc = new Intent(this, AccManargerActivity.class);
+		acc.putExtras(bu);
+		startActivity(acc);
+		return super.onOptionsItemSelected(item);
+	}
+
+	public void size(File f) {
+		try {
+			FileInputStream fis = new FileInputStream(f);
+			size = (float) fis.available();
+			Log.i("size", size + "");
+			UPcount = (int) (size / 65536) + 1;
+
+		} catch (IOException e) {
+		}
+	}
+
+	public boolean checkLineInstalled() {
+
+		PackageManager pm = getPackageManager();
+		m_appList = pm.getInstalledApplications(0);
+		boolean lineInstallFlag = false;
+		for (ApplicationInfo ai : m_appList) {
+
+			if (ai.packageName.equals(PACKAGE_NAME)) {
+
+				lineInstallFlag = true;
+				break;
+			}
+
+		}
+		// TODO Auto-generated method stub
+		return lineInstallFlag;
+	}
+
+	@Override
+	protected void onResume() {
+		// TODO Auto-generated method stub
+		super.onResume();
+
+	}
+
+	private void ShowImage(int requestCode, Intent data) {
+		Uri selectedImage = data.getData();
+		if (selectedImage != null) {
+			Toast.makeText(this, "附加圖片成功", 1).show();
+		}
+		iconpath = getPath(getApplicationContext(), selectedImage);
+		Bitmap bit = BitmapFactory.decodeFile(iconpath);
+		saveImage(bit);
+		iv_gameicon.setImageBitmap(bit);
+	}
+
+	@SuppressLint("NewApi")
+	public String getPath(final Context context, final Uri uri) {
+
+		final boolean isKitKat = Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT;
+
+		// DocumentProvider
+		if (isKitKat && DocumentsContract.isDocumentUri(context, uri)) {
+			// ExternalStorageProvider
+			if (isExternalStorageDocument(uri)) {
+				final String docId = DocumentsContract.getDocumentId(uri);
+				final String[] split = docId.split(":");
+				final String type = split[0];
+
+				if ("primary".equalsIgnoreCase(type)) {
+					return Environment.getExternalStorageDirectory() + "/"
+							+ split[1];
+				}
+
+				// TODO handle non-primary volumes
+			}
+			// DownloadsProvider
+			else if (isDownloadsDocument(uri)) {
+
+				final String id = DocumentsContract.getDocumentId(uri);
+				final Uri contentUri = ContentUris.withAppendedId(
+						Uri.parse("content://downloads/public_downloads"),
+						Long.valueOf(id));
+
+				return getDataColumn(context, contentUri, null, null);
+			}
+			// MediaProvider
+			else if (isMediaDocument(uri)) {
+				final String docId = DocumentsContract.getDocumentId(uri);
+				final String[] split = docId.split(":");
+				final String type = split[0];
+
+				Uri contentUri = null;
+				if ("image".equals(type)) {
+					contentUri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
+				} else if ("video".equals(type)) {
+					contentUri = MediaStore.Video.Media.EXTERNAL_CONTENT_URI;
+				} else if ("audio".equals(type)) {
+					contentUri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
+				}
+
+				final String selection = "_id=?";
+				final String[] selectionArgs = new String[] { split[1] };
+
+				return getDataColumn(context, contentUri, selection,
+						selectionArgs);
+			}
+		}
+		// MediaStore (and general)
+		else if ("content".equalsIgnoreCase(uri.getScheme())) {
+
+			// Return the remote address
+			if (isGooglePhotosUri(uri))
+				return uri.getLastPathSegment();
+
+			return getDataColumn(context, uri, null, null);
+		}
+		// File
+		else if ("file".equalsIgnoreCase(uri.getScheme())) {
+			return uri.getPath();
+		}
+
+		return null;
+	}
+
+	public static boolean isExternalStorageDocument(Uri uri) {
+		return "com.android.externalstorage.documents".equals(uri
+				.getAuthority());
+	}
+
+	public static boolean isDownloadsDocument(Uri uri) {
+		return "com.android.providers.downloads.documents".equals(uri
+				.getAuthority());
+	}
+
+	public static boolean isMediaDocument(Uri uri) {
+		return "com.android.providers.media.documents".equals(uri
+				.getAuthority());
+	}
+
+	public static boolean isGooglePhotosUri(Uri uri) {
+		return "com.google.android.apps.photos.content".equals(uri
+				.getAuthority());
+	}
+
+	public static String getDataColumn(Context context, Uri uri,
+			String selection, String[] selectionArgs) {
+
+		Cursor cursor = null;
+		final String column = "_data";
+		final String[] projection = { column };
+
+		try {
+			cursor = context.getContentResolver().query(uri, projection,
+					selection, selectionArgs, null);
+			if (cursor != null && cursor.moveToFirst()) {
+				final int index = cursor.getColumnIndexOrThrow(column);
+				return cursor.getString(index);
+			}
+		}
+
+		finally {
+			if (cursor != null)
+				cursor.close();
+		}
+		return null;
+	}
+
+	@Override
+	public void onClick(View v) {
+		// TODO Auto-generated method stub
+	}
+
+	// ----------上傳-----------
+	public void uploadFile(File fileName, String type) {
+		FTPClient client = new FTPClient();
+		try {
+			do {
+				client.connect(FTP_HOST);
+				client.login(FTP_USER, FTP_PASS);
+			} while (client.equals(null) || !client.isConnected());
+			Log.i("datasend", String.valueOf(client.isConnected()));
+			client.setType(FTPClient.TYPE_BINARY);
+			client.changeDirectory("/public_html/" + type + "/");// "/public_html/video/"
+			Log.i("datasend", client.toString());
+			client.upload(fileName, new MyTransferListener());
+		} catch (Exception e) {
+			e.printStackTrace();
+			try {
+				client.disconnect(true);
+				PD.dismiss();
+			} catch (Exception e2) {
+				e2.printStackTrace();
+			}
+		}
+	}
+
+	@Override
+	public void onBackPressed() {
+		if (Drink.isChecked() && backcount++ < 1) {
+			Toast.makeText(this, "您已經有寄杯，再次按下返回鍵將放棄已付款飲料", 0).show();
+		} else {
+			finish();
+		}
+
+	}
+
+	// ----------上傳-----------
+	public class MyTransferListener implements FTPDataTransferListener {
+
+		public void started() {
+			Log.i("datasend", "開始");
+		}
+
+		public void transferred(int length) {
+			Log.i("datasend", String.valueOf(length));
+			handler.sendEmptyMessage(0);
+		}
+
+		public void completed() {
+			datasend = "傳送完成";
+
+		}
+
+		public void aborted() {
+			// datasend = "傳送中斷";
+		}
+
+		public void failed() {
+			datasend = "傳送失敗";
+		}
+
+	}
+	// ----------上傳-----------
+
+}
